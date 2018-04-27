@@ -1,0 +1,9 @@
+#ignore files to add
+*.csv
+script/*.json
+script/*.txt
+script/60/*
+script/*.csv
+script/save/*
+script/*.pyc
+
