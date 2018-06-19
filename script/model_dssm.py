@@ -6,7 +6,11 @@ import time
 import sys
 import json
 from sklearn.metrics import roc_auc_score
-
+import logging
+logging.getLogger().setLevel(logging.DEBUG)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(levelname)s[%(asctime)s]%(message)s')
 ##### prepare data
 
 SLIDING_STEP = 3
@@ -18,6 +22,7 @@ class Data():
         self.data = [] # (total, 2, 21, 1150)
         self.batch_id = 0
         self.data_label = []
+        self.data_length = []
         self.bag_words = json.load(open('bag_words.json', 'r'))
         file = open(path, 'r')
         num = 0
@@ -28,13 +33,16 @@ class Data():
             else:
                 self.data_label.append(0)
             _t = []
-            _t.append(self.input_layer(li[1]))
-            _t.append(self.input_layer(li[2]))
+            r1, l1 = self.input_layer(li[1])
+            r2, l2 = self.input_layer(li[2])
+            _t.append(r1)
+            _t.append(r2)
             self.data.append(_t)
+            self.data_length.append([l1, l2])
             ## control mini data
-            num+=1
-            if num == 500:
-                break
+            # num+=1
+            # if num == 500:
+            #     break
 
     def input_layer(self, query):
         """
@@ -61,10 +69,11 @@ class Data():
                 _v = q_label[i + _i]
                 curr[_v] += 1
             result.append(curr)
+        length = len(result)
         while len(result) < STEPS:
             result = [[0 for _ in range(1150)]] + result
-        result += [final]
-        return result
+        # result += [final]
+        return result, length
 
 
     def next(self, batch_size):
@@ -80,10 +89,9 @@ class Data():
             self.batch_id = self.batch_id + batch_size
         return batch_data, batch_data_label
 
-
-trainset = Data('trainset.txt')
 testset = Data('testset.txt')
-print len(trainset.data)
+trainset = Data('trainset.txt')
+# print len(trainset.data)
 print 'load file finish'
 
 right = 0
@@ -94,78 +102,101 @@ total = 0
 # ==============
 
 learning_rate = 0.001
-training_iters = 10000
+training_iters = 5000000
 batch_size = 128
-display_step = 10
+display_step = 100
 
 # Network Parameters
 n_input = 1150  # data input
 n_steps = STEPS+1  # time steps
-n_hidden = 300  # hidden layer num of features
-n_classes = 128  # total classes output lstm
+n_hidden = 32  # hidden layer num of features
+n_classes = 32  # total classes output lstm
 
 X_in = tf.placeholder(tf.float32, [None, 2, n_steps, n_input])
 y = tf.placeholder(tf.float32, [None])
 
-
-# define weights
-weights = {
-    # (1150 * 300)
-    # 'in': tf.Variable(tf.random_normal([n_input, n_hidden]), ),
-    # (128*2, 1)
-    'out': tf.Variable(tf.random_normal([n_classes * 2, 1]))
-}
-biases = {
-    # 'in': tf.Variable(tf.constant(0.1, shape=[n_hidden, ])),
-    'out': tf.Variable(tf.constant(0.1, shape=[1, ]))
-}
+with tf.variable_scope('fc') as scope:
+    weights = {
+        # (60 * 300)
+        'in': tf.Variable(tf.random_normal([n_input, n_hidden]), ),
+    }
+    biases = {
+        'in': tf.Variable(tf.constant(0.1, shape=[n_hidden, ])),
+        'mini': tf.constant(0.00001, shape=[1, ])
+    }
+    scope.reuse_variables()
 
 def LSTMRNN(X, weights, biases):
-    ### x shape (batch, 2, steps, n_input)
+    ### x shape (batch, 2, n_steps, n_input)
     X1 = X[:, 0]
     X2 = X[:, 1]
-
-    # X1 = tf.reshape(X1, [-1, n_input])
-    # X1 = tf.matmul(X1, weights['in']) + biases['in']
-    # X1 = tf.reshape(X1, [-1, n_steps, n_hidden])
-    X1 = tf.tanh(X1)
+    X1 = tf.reshape(X1, [-1, n_input])
+    X1 = tf.matmul(X1, weights['in']) + biases['in']
+    X1 = tf.reshape(X1, [-1, n_steps, n_hidden])
+    X2 = tf.reshape(X2, [-1, n_input])
+    X2 = tf.matmul(X2, weights['in']) + biases['in']
+    X2 = tf.reshape(X2, [-1, n_steps, n_hidden])
+    X1 = tf.nn.relu(X1)
+    X2 = tf.nn.relu(X2)
     X1 = tf.unstack(X1, n_steps, 1)
-
-    # X2 = tf.reshape(X2, [-1, n_input])
-    # X2 = tf.matmul(X2, weights['in']) + biases['in']
-    # X2 = tf.reshape(X2, [-1, n_steps, n_hidden])
-    X2 = tf.tanh(X2)
     X2 = tf.unstack(X2, n_steps, 1)
+    size = tf.shape(X)[0]
+    with tf.name_scope("layer1"):
+        with tf.variable_scope("layer1"):
+            lstm_cell = tf.contrib.rnn.BasicLSTMCell(n_hidden)
+            init_state1 = lstm_cell.zero_state(size, dtype=tf.float32)
+            outputs1, states1 = tf.contrib.rnn.static_rnn(lstm_cell, X1, dtype=tf.float32, scope='cell1'
+                                                          , initial_state=init_state1)
+            outputs2, states2 = tf.contrib.rnn.static_rnn(lstm_cell, X2, dtype=tf.float32, scope='cell1'
+                                                          , initial_state=init_state1)
+            # m1 = tf.unstack(tf.nn.relu(outputs1), n_steps, 1)
+            m1 = []
+            for i in outputs1:
+                m1.append(tf.nn.relu(i))
+            # m2 = tf.unstack(tf.nn.relu(outputs2), n_steps, 1)
+            m2 = []
+            for i in outputs2:
+                m2.append(tf.nn.relu(i))
 
-    lstm_cell = tf.contrib.rnn.BasicLSTMCell(n_classes)
 
-    outputs1, states1 = tf.contrib.rnn.static_rnn(lstm_cell, X1, dtype=tf.float32, scope='cell')
-    outputs2, states2 = tf.contrib.rnn.static_rnn(lstm_cell, X2, dtype=tf.float32, scope='cell')
+    with tf.name_scope("layer2"):
+        with tf.variable_scope("layer2"):
+            lstm_cell2 = tf.contrib.rnn.BasicLSTMCell(n_classes)
+            init_state2 = lstm_cell2.zero_state(size, dtype=tf.float32)
+            o1, _ = tf.contrib.rnn.static_rnn(lstm_cell2, m1, dtype=tf.float32, scope='cell2', \
+                                              initial_state=init_state2)
+            o2, _ = tf.contrib.rnn.static_rnn(lstm_cell2, m2, dtype=tf.float32, scope='cell2', \
+                                              initial_state=init_state2)
 
     # outputs (batch*steps, classes) => (batch, steps, classes)
     #outputs = tf.reshape(outputs, [-1, n_steps, n_classes])
     # final shape => (batch, classes)
-    result_1 = outputs1[-1]
-    result_2 = outputs2[-1]
-    merge = tf.concat([result_1, result_2], 1)
-    final = tf.matmul(merge, weights['out']) + biases['out']
+    result_1 = o1[-1]
+    result_2 = o2[-1]
+    # merge = tf.concat([result_1, result_2], 1)
+    # final = tf.matmul(merge, weights['out']) + biases['out']
+    norm1 = tf.sqrt(tf.reduce_sum(tf.square(result_1), axis=1))
+    norm2 = tf.sqrt(tf.reduce_sum(tf.square(result_2), axis=1))
+    dot = tf.reduce_sum(tf.multiply(result_1, result_2), axis=1)
+    final = dot / tf.add(tf.multiply(norm1, norm2), biases['mini'])
     return final
 
 
 final = LSTMRNN(X_in, weights, biases)
-pred = tf.sigmoid(final)
-pred = tf.reshape(pred, [batch_size])
-tv = tf.trainable_variables()
-l2_cost = 0.001 * tf.reduce_sum([ tf.nn.l2_loss(v) for v in tv ])
-cost = -tf.reduce_mean( y * tf.log(pred+0.00001) + (1 - y) * tf.log(1 - pred+0.00001)) + l2_cost
+final = final * 0.5 + 0.5
+pred = tf.reshape(final, [-1])
+# tv = tf.trainable_variables()
+# l2_cost = 0.001 * tf.reduce_sum([ tf.nn.l2_loss(v) for v in tv ])
+cost = -tf.reduce_mean( y * tf.log(pred+0.00001) + (1 - y) * tf.log(1 - pred+0.00001))
 train_op = tf.train.AdamOptimizer(learning_rate).minimize(cost)
 init = tf.global_variables_initializer()
 saver = tf.train.Saver()
 
-# config = tf.ConfigProto()
-# config.gpu_options.per_process_gpu_memory_fraction = 0.4
-# with tf.Session(config=config) as sess:
-with tf.Session() as sess:
+last_acc = 0.0
+config = tf.ConfigProto()
+config.gpu_options.per_process_gpu_memory_fraction = 0.6
+with tf.Session(config=config) as sess:
+# with tf.Session() as sess:
     sess.run(init)
     step = 1
     while step * batch_size < training_iters:
@@ -173,27 +204,22 @@ with tf.Session() as sess:
         sess.run(train_op, feed_dict={X_in: batch_x, y: batch_y})
         step += 1
         if step % display_step == 0:
-            print 'show message:'
             y_pred = sess.run(pred, feed_dict={X_in: batch_x, y: batch_y})
             y_label = sess.run(y, feed_dict={y: batch_y})
             batch_loss = sess.run(cost, feed_dict={X_in: batch_x, y: batch_y})
-            print y_pred, y_label
-            print "Iter " + str(step * batch_size) + ", Minibatch Loss= " + \
+            # print y_pred, y_label
+            logging.info("Iter " + str(step * batch_size) + ", Minibatch Loss= " + \
                   "{:.5f}".format(batch_loss) + ", Training Accuracy= " + \
-                  "{:.5f}".format(roc_auc_score(y_label, y_pred))
+                  "{:.5f}".format(roc_auc_score(y_label, y_pred)))
+            if step % (display_step * 4) == 0:
+                t_x, t_y = testset.next(len(testset.data))
+                t_pred = sess.run(pred, feed_dict={X_in: t_x, y: t_y})
+                t_label = sess.run(y, feed_dict={y: t_y})
+                acc = roc_auc_score(t_label, t_pred)
+                # print (t_pred, t_label)
+                logging.info("test acc: " + str(acc))
+                if acc > last_acc:
+                    saver.save(sess, 'save_bow/dssm_bow', global_step=step)
+                    last_acc = acc
 
-
-    print 'finish training!'
-    saver.save(sess, 'save/dssm_test')
-
-    test_step = 0
-    test_acc = 0
-    while test_step * batch_size < len(testset.data):
-        batch_x, batch_y = testset.next(batch_size)
-        y_pred = sess.run(pred, feed_dict={X_in: batch_x, y: batch_y})
-        y_label = sess.run(y, feed_dict={y: batch_y})
-        acc = roc_auc_score(y_label, y_pred)
-        test_acc += acc
-        test_step += 1
-    print 'test acc:' + str(test_acc / test_step)
-
+    logging.info('finish training!')

@@ -7,11 +7,13 @@ import jieba
 import random
 from features import features
 from sklearn import metrics
+import json
 
 LENGTH = 60
 DATA_PATH='data.txt'
 obj = features()
 STATISTICAL_LENGTH = 8
+
 
 
 def split(sent):
@@ -33,8 +35,7 @@ def load_w2v(path):
         x_set.append(msg)
         line_num += 1
     print len(y_label)
-    print y_label[1]
-    print 'word2vec data process finish:'
+    print 'word2vec data process finish'
     X = np.array(x_set)
     X = np.reshape(X, (-1, 2*LENGTH))
     y = np.array(y_label)
@@ -113,45 +114,20 @@ def train_lr():
     print "mission complete!"
 
 
-def score_svm(data):
-    x_set = []
-    for i in data:
-        s1 = i['query']
-        s2 = i['question']
-        msg1 = np.zeros((LENGTH), dtype=np.float32)
-        msg2 = np.zeros((LENGTH), dtype=np.float32)
-        for i in s1:
-            try:
-                msg1 += wv[i]
-            except:
-                pass
-        for i in s2:
-            try:
-                msg2 += wv[i]
-            except:
-                pass
-        msg1 = msg1 / float(len(s1))
-        msg2 = msg2 / float(len(s2))
-        msg = np.concatenate((msg1, msg2))
-        x_set.append(msg)
-    X = np.array(x_set)
-    X = np.reshape(X, (-1, 2*LENGTH))
-    with open('clf.pickle', 'rb') as f:
-        clf2 = pickle.load(f)
-        return clf2.predict(X)
-
-
 if __name__ == "__main__":
-    print 'statistical:'
-    train_svm_statistical()
-    #print 'w2v'
-    #train_svm_wv()
-
-    X_test, y_test = load_statistical('testset.txt')
-    with open('save/svm_st.pickle', 'rb') as f:
+    X_test, y_test = load_w2v('testset.txt')
+    with open('save/svm_wv.pickle', 'rb') as f:
         clf2 = pickle.load(f)
         ypred = clf2.predict(X_test)
         print 'AUC: %.4f' % metrics.roc_auc_score(y_test, ypred)
+
+    with open('fusion_result.json', 'r') as f:
+        d = json.load(f)
+
+    d['svm_st'] = ypred.tolist()
+    with open('fusion_result.json', 'w') as f:
+        json.dump(d, f)
+
 
     # X_test, y_test = load_w2v('testset.txt')
     # with open('save/svm_wv.pickle', 'rb') as f:

@@ -1,5 +1,4 @@
 # -*- coding:utf-8 -*-
-
 import xgboost as xgb
 from sklearn import svm
 from sklearn import linear_model
@@ -14,11 +13,24 @@ from sklearn import metrics
 from flask import Flask, request, make_response, jsonify, send_from_directory
 import traceback
 import json
+from model_lstm import *
+from model_bow import *
 
 
 LENGTH = 60
 obj = features()
 app = Flask(__name__)
+lstm_w2v = Dssm_w2v()
+
+with open('save/svm_wv.pickle', 'rb') as f:
+    svm_clf = pickle.load(f)
+
+bst_st = xgb.Booster({'nthread': 4})  # init model
+bst_st.load_model("save/xgb_st.model")  # load data
+
+bst_wv = xgb.Booster({'nthread': 4})  # init model
+bst_wv.load_model("save/xgb_wv.model")  # load data
+
 
 def load_statistical(path):
     f1 = open(path, 'r')
@@ -67,9 +79,8 @@ def load_wv(path):
 
 
 def test_xgb(q1, q2, name):
-    bst = xgb.Booster({'nthread': 4})  # init model
-    bst.load_model("save/" + name + ".model")  # load data
     if name == 'xgb_st':
+        bst = bst_st
         X = []
         for a,b in zip(q1, q2):
             X.append(obj.statistical(a, b))
@@ -77,6 +88,7 @@ def test_xgb(q1, q2, name):
         ypred = bst.predict(dtest)
         return ypred.tolist()
     elif name == 'xgb_wv':
+        bst = bst_wv
         X = []
         for a, b in zip(q1, q2):
             X.append(obj.word2vec(a, b))
@@ -86,8 +98,9 @@ def test_xgb(q1, q2, name):
 
 
 def test_svm(q1, q2, name):
-    with open('save/%s.pickle' % name, 'rb') as f:
-        clf = pickle.load(f)
+    # with open('save/%s.pickle' % name, 'rb') as f:
+    #     clf = pickle.load(f)
+    clf = svm_clf
     if name == 'svm_st':
         X = []
         for a,b in zip(q1, q2):
@@ -123,8 +136,10 @@ def sentence_similarity():
         result['score'] = {}
         result['score']['xgb_st'] = test_xgb(query, questions, 'xgb_st')
         result['score']['xgb_wv'] = test_xgb(query, questions, 'xgb_wv')
-        result['score']['svm_st'] = test_svm(query, questions, 'svm_st')
+        # result['score']['svm_st'] = test_svm(query, questions, 'svm_st')
         result['score']['svm_wv'] = test_svm(query, questions, 'svm_wv')
+        result['score']['lstm_wv'] = lstm_w2v.test(query, questions).tolist()
+        # result['score']['lstm_bow'] = lstm_bow.test(query, questions).tolist()
         return make_response(jsonify(result))
 
     except BaseException, e:
@@ -136,7 +151,7 @@ def sentence_similarity():
 if __name__ == '__main__':
     app.run(host = '0.0.0.0', port=6666, threaded=True)
     #train_xgb_st()
-    #test_xgb(0, 0, 'xgb_st')
-    #test_svm(0, 0, 'svm_st')
-
+    # test = Dssm_bow()
+    # test.train()
+    # print test.test(["都支持什么付款方式？"], ["支持的支付方式"])
 

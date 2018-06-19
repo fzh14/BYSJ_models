@@ -138,7 +138,27 @@ def test_xgb(q1, q2, name):
 
 
 if __name__ == '__main__':
-    train_xgb_wv()
-    #test_xgb(0, 0, 'xgb_st')
-    #test_svm(0, 0, 'svm_st')
+    with open('fusion_result.json', 'r') as f:
+        d = json.load(f)
+    X_test, y_test = load_statistical('testset.txt')
+    bst_st = xgb.Booster({'nthread': 4})  # init model
+    bst_st.load_model("save/xgb_st.model")  # load data
+    dtest = xgb.DMatrix(X_test)
+    ypred = bst_st.predict(dtest)
+    d['xgb_st'] = ypred.tolist()
+    print 'AUC: %.4f' % metrics.roc_auc_score(y_test, ypred)
 
+    X_test, y_test = load_wv('testset.txt')
+    bst_wv = xgb.Booster({'nthread': 4})  # init model
+    bst_wv.load_model("save/xgb_wv.model")  # load data
+    dtest = xgb.DMatrix(X_test)
+    ypred = bst_wv.predict(dtest)
+    d['xgb_wv'] = ypred.tolist()
+    print 'AUC: %.4f' % metrics.roc_auc_score(y_test, ypred)
+
+    d['label'] = y_test.tolist()
+
+    with open('fusion_result.json', 'w') as f:
+        json.dump(d, f)
+
+    print d.keys()

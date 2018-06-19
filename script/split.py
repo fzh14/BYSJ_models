@@ -8,13 +8,12 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 import csv
-import gensim
 
 
 def get_data():
     data_list = []
     f = open('database.csv','r')
-    fw = open('data.txt','w')
+    fw = open('dat2.txt','w')
     group_id = -1
     count = 0
     csv_file = csv.reader(f)
@@ -29,7 +28,7 @@ def get_data():
             print i, count
             break
         count += 1
-    print count
+    print group_id
     for idx in range(len(data_list)):
         if idx%100 == 5:
             print idx
@@ -40,8 +39,6 @@ def get_data():
                 k = random.randint(0, curr_n-1)
                 if curr_n == 1:
                     break
-                while k==i:
-                    k = random.randint(0, curr_n - 1)
                 q2 = data_list[idx][k]
                 fw.write('1\t'+q1+'\t'+q2+'\n')
             for _ in range(5):
@@ -160,52 +157,6 @@ def word_share():
 '''
 
 
-def train():
-    sentences = word2vec.Text8Corpus('sentence_split.txt')
-    model = word2vec.Word2Vec(sentences, min_count=3, size=100)
-    model.save('model1')
-
-
-def test():
-    dict = json.load(codecs.open('json.txt','r','utf-8'), encoding='utf8')
-    v1=[]
-    v2=[]
-    cal_dist={}
-    for i in range(5000):
-        v1.append(0)
-        v2.append(0)
-    model = word2vec.Word2Vec.load('model1')
-    f = open('testset.txt','r')
-    for line in f.readlines():
-        cal_dist={}
-        li = line.split('\t')
-        word_l1 = jieba.lcut(li[1])
-        word_l2 = jieba.lcut(li[2])
-        for i in word_l1:
-            try:
-                for similar_word in model.wv.most_similar(i):
-                    if not cal_dist.has_key(similar_word[0]):
-                        cal_dist[similar_word[0]] = similar_word[1]*1.0
-                    else:
-                        if cal_dist[similar_word[0]] < similar_word[1]:
-                            cal_dist[similar_word[0]] = similar_word[1]
-            except:
-                pass
-        for i in word_l2:
-            try:
-                for similar_word in model.wv.most_similar(i):
-                    if not cal_dist.has_key(similar_word[0]):
-                        cal_dist[similar_word[0]] = similar_word[1]
-                    else:
-                        cal_dist[similar_word[0]] -= similar_word[1]
-            except:
-                pass
-        ans = 0.0
-        for key in cal_dist.keys():
-            ans += cal_dist[key]*cal_dist[key]
-        print ans
-
-
 def generate_word_dict():
     f = open('data.txt','r')
     voc = {}
@@ -229,55 +180,20 @@ def generate_word_dict():
     print ar
     for i in range(len(ar)):
         valid_dict[ar[i][0]] = i
-
     with open('bag_words.json','w') as fw:
         json.dump(valid_dict, fw)
-'''
-    _test = json.load(open('wordbag.json','r'))
-    f = open('data.txt', 'r')
-    for i in f.readlines():
-        li = i.strip().split('\t')
-        for sentence in li[1:]:
-            sentence = unicode(sentence, 'utf-8')
-            for w in sentence:
-                #print i
-                if not _test.has_key(w):
-                    print w, i.strip()
-'''
+
 
 
 if __name__ == '__main__':
-    #split_set()
-    #word_share()
+    get_data()
+    # split_set()
     # with open('60/word_60.pickle', 'rb') as temp:
     #     wv = pickle.load(temp)
-    # # print wv.__class__
-    # wv.save_word2vec_format('test_01.model.txt', binary=False)
+    # print wv.__class__
+    # wv.save_word2vec_format('60.model.txt', binary=False)
     #
-    f = open('test_01.model.txt','r')
-    f.readline()
-    # f = open('test.txt','r')
-    fp = open('w2v.txt', 'w')
-    d = {}
-    # num = 0
-    # wrong = 0
-    for line in f.readlines():
-        li = line.strip().split(' ')
-        if len(li) != 61:
-            continue
-        list_t = []
-        for i in li[1:]:
-            list_t.append(float(i))
-        arr = np.array(list_t)
-        if len(arr) != 60:
-            print li[0], list_t
-            continue
-        d[li[0].decode('utf-8')] = arr
-        fp.write(line)
-
-        # d[li[0]] = arr
-
-    # with open('60/60_uni.pickle','wb') as t:
+    # with open('60/60_channel_2.pickle','wb') as t:
     #     pickle.dump(d,t)
 
     # for line in f.readlines():

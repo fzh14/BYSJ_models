@@ -1,6 +1,5 @@
 # -*- coding:utf-8 -*-
 from sklearn import svm
-from gensim.models.keyedvectors import KeyedVectors
 from sklearn import linear_model
 import numpy as np
 import pickle
@@ -15,19 +14,17 @@ from scipy.linalg import norm
 
 class features():
     def __init__(self):
-        with open('60/word_60.pickle', 'rb') as temp:
+        with open('60/60_channel_2.pickle', 'rb') as temp:
             self.wv = pickle.load(temp)
         self.WORD2VEC_LENGTH = 60
         self.d = json.load(codecs.open('share_words.json','r','utf-8'), encoding='utf8')
 
 
     def tfidf(self, query1, query2):
-        #print 'input:' + query1 + '\t' + query2
         try:
             corpus = [[],[]]
             corpus[0] = ' '.join(jieba.cut(query1))
             corpus[1] = ' '.join(jieba.cut(query2))
-            #print corpus
             vectorizer = TfidfVectorizer()
             tfidf_ = vectorizer.fit_transform(corpus)
             vectors = tfidf_.toarray()
@@ -79,7 +76,7 @@ class features():
                 # print i, self.wv[i], len(self.wv[i])
                 msg2 += self.wv[i]
             except:
-                print i
+                # print i
                 pass
         msg1_ave = msg1 / len(s1)
         msg2_ave = msg2 / len(s2)
@@ -172,7 +169,7 @@ class features():
             try:
                 msg2.append(self.wv[i])
             except:
-                print i
+                # print i
                 msg2.append(np.zeros((self.WORD2VEC_LENGTH), dtype=np.float32))
         m = len(msg1)
         n = len(msg2)
@@ -183,7 +180,7 @@ class features():
                 matrix[x].append((np.dot(msg1[x], msg2[y]) + 0.01) / (norm(msg1[x]) * norm(msg2[y]) + 0.01))
         alpha = 0.95
         val = 0
-        i, j = 0, 0
+        i, j = -1, -1
         while i < m - 1 and j < n - 1:
             curr = 0
             next_i, next_j = i + 1, j + 1
@@ -200,15 +197,25 @@ class features():
         return val
 
 
+    def word2vec_list(self, query1, query2):
+        s1 = jieba.lcut(query1)
+        s2 = jieba.lcut(query2)
+        msg1 = []
+        msg2 = []
+        for i in s1:
+            try:
+                msg1.append(np.array(self.wv[i]))
+            except:
+                pass
+        for i in s2:
+            try:
+                msg2.append(np.array(self.wv[i]))
+            except:
+                pass
+        msg = [msg1, msg2]
+        length = [len(msg1), len(msg2)]
+        return msg, np.array(length)
+
 
 if __name__ == '__main__':
-    print 'start:'
-    f = open('testset.txt', 'r')
-    line = f.readline()
-    line = f.readline()
-    li = line.split('\t')
-    obj = features()
-    # print obj.statistical(li[1], li[2])
-    # print obj.dtw(li[1], li[2])
-    print obj.word2vec(li[1], li[2])
-
+    print 'begin'
